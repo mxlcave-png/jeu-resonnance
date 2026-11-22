@@ -16,6 +16,11 @@ const joueur = {
 const GRAVITE = 0.6;
 const FORCE_SAUT = -12;
 
+// Armes et pouvoirs
+const modes = ["epee", "arc"];
+let indexMode = 0;
+let resonanceActive = false;
+
 // Les plateformes (x, y, largeur, hauteur)
 const plateformes = [
   { x: 0, y: 410, largeur: 2000, hauteur: 40 },   // le sol
@@ -33,6 +38,18 @@ const camera = { x: 0 };
 const touches = {};
 document.addEventListener("keydown", (e) => {
   touches[e.key] = true;
+
+  // E : changer d'arme
+  if (e.key === "e" || e.key === "E") {
+    indexMode = (indexMode + 1) % modes.length;
+  }
+
+  // T : activer ou désactiver la résonance
+  if (e.key === "t" || e.key === "T") {
+    resonanceActive = !resonanceActive;
+  }
+
+  // Saut
   if ((e.key === "ArrowUp" || e.key === " ") && joueur.auSol) {
     joueur.vitesseY = FORCE_SAUT;
     joueur.auSol = false;
@@ -45,7 +62,7 @@ function mettreAJour() {
   if (touches["ArrowLeft"]) joueur.x -= joueur.vitesse;
   if (touches["ArrowRight"]) joueur.x += joueur.vitesse;
 
-  // Limites du monde (le personnage ne sort plus)
+  // Limites du monde
   if (joueur.x < 0) joueur.x = 0;
   if (joueur.x + joueur.taille > LARGEUR_MONDE) {
     joueur.x = LARGEUR_MONDE - joueur.taille;
@@ -78,7 +95,7 @@ function mettreAJour() {
 function dessiner() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // Tout ce qui suit est décalé par la caméra
+  // Monde (décalé par la caméra)
   ctx.save();
   ctx.translate(-camera.x, 0);
 
@@ -93,6 +110,12 @@ function dessiner() {
   ctx.fillRect(joueur.x, joueur.y, joueur.taille, joueur.taille);
 
   ctx.restore();
+
+  // Affichage de l'arme et de la résonance (fixe à l'écran)
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "16px Arial";
+  ctx.fillText("Arme : " + (modes[indexMode] === "epee" ? "Épée" : "Arc"), 10, 25);
+  ctx.fillText("Résonance : " + (resonanceActive ? "ON" : "OFF"), 10, 47);
 }
 
 function boucle() {
