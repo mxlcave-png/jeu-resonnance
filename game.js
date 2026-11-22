@@ -1,65 +1,91 @@
 const canvas = document.getElementById("jeu");
 const ctx = canvas.getContext("2d");
 
-// Taille du monde (plus large que l'écran)
-const LARGEUR_MONDE = 2000;
-const HAUTEUR_MONDE = 450;
+// ----- Réglages repris du projet Godot « fracture » -----
+const TAILLE_TUILE = 16;               // taille par défaut d'une tuile Godot
+const GRAVITE = 980;                   // gravité par défaut de Godot en 2D
+const VITESSE = 200;
+const FORCE_SAUT = -300;
+const SAUTS_MAX = 2;                   // double saut
+const VITESSE_DASH = 500;
+const DUREE_DASH = 0.2;                // en secondes
+const ZONE_MORT_Y = 1253 - 1568 / 2;   // haut de la zone de mort (469)
+const DEPART_X = -16;
+const DEPART_Y = -42;
 
-// Le personnage
+// ----- Niveau : chaque ligne de tuiles est [numéro de ligne, [[début, fin], ...]] -----
+const LIGNES = [
+  [8,  [[44, 58], [63, 72], [74, 78]]],
+  [9,  [[-12, 2], [7, 21], [28, 37], [44, 58], [63, 72], [74, 78]]],
+  [10, [[-12, 2], [7, 21], [28, 38], [44, 58], [63, 72], [74, 78]]],
+  [11, [[-12, 2], [7, 21], [28, 38], [44, 58], [63, 72], [74, 78]]],
+  [12, [[-12, 2], [7, 21], [28, 38], [45, 57], [63, 72], [74, 78]]],
+  [13, [[-12, 2], [7, 21], [29, 37], [45, 50], [52, 52], [54, 56], [63, 72], [74, 78]]],
+  [14, [[-11, 2], [8, 21], [29, 37], [45, 48], [54, 54]]],
+  [15, [[-11, -8], [-4, 1], [8, 11], [15, 20], [29, 36]]],
+  [16, [[31, 36]]],
+  [18, [[37, 37]]],
+  [20, [[-9, -9], [-1, -1], [15, 15]]],
+  [42, [[171, 171]]]
+];
+
+// Transforme les lignes en rectangles de collision (x, y, largeur, hauteur en pixels)
+const SOLS = [];
+for (const [ligne, segments] of LIGNES) {
+  for (const [debut, fin] of segments) {
+    SOLS.push({
+      x: debut * TAILLE_TUILE,
+      y: ligne * TAILLE_TUILE,
+      w: (fin - debut + 1) * TAILLE_TUILE,
+      h: TAILLE_TUILE
+    });
+  }
+}
+// Mur vertical très bas à gauche
+SOLS.push({ x: -88 * TAILLE_TUILE, y: 363 * TAILLE_TUILE, w: 4 * TAILLE_TUILE, h: 10 * TAILLE_TUILE });
+
+// ----- Le personnage -----
 const joueur = {
-  x: 380, y: 100, taille: 40,
-  vitesse: 4,
-  vitesseY: 0,
+  x: DEPART_X, y: DEPART_Y, w: 32, h: 95,
+  vx: 0, vy: 0,
   auSol: false,
-  direction: 1          // 1 = regarde à droite, -1 = regarde à gauche
+  sautsRestants: SAUTS_MAX,
+  enDash: false,
+  dashTimer: 0,
+  direction: 1          // 1 = droite, -1 = gauche
 };
 
-const GRAVITE = 0.6;
-const FORCE_SAUT = -12;
-
-// Armes et pouvoirs
+// ----- Armes et pouvoirs -----
 const modes = ["epee", "arc"];
 let indexMode = 0;
 let resonanceActive = false;
-
-// Attaques en cours (lames et flèches)
 const attaques = [];
 
-// Les plateformes (x, y, largeur, hauteur)
-const plateformes = [
-  { x: 0, y: 410, largeur: 2000, hauteur: 40 },   // le sol
-  { x: 250, y: 310, largeur: 150, hauteur: 20 },
-  { x: 500, y: 250, largeur: 150, hauteur: 20 },
-  { x: 800, y: 340, largeur: 200, hauteur: 20 },
-  { x: 1200, y: 280, largeur: 150, hauteur: 20 },
-  { x: 1550, y: 220, largeur: 200, hauteur: 20 }
-];
+// ----- Caméra -----
+const camera = { x: 0, y: 0 };
 
-// Caméra
-const camera = { x: 0 };
-
-// Touches appuyées
+// ----- Contrôles -----
 const touches = {};
-document.addEventListener("keydown", (e) => {
-  touches[e.key] = true;
+let demandeSaut = false;
+let demandeDash = false;
 
-  // E : afficher l'arme suivante dans la main
+document.addEventListener("keydown", (e) => {
+  touches[e.code] = true;
+
+  if (!e.repeat && (e.code === "Space" || e.code === "ArrowUp")) demandeSaut = true;
+  if (!e.repeat && (e.code === "ShiftLeft" || e.code === "ShiftRight")) demandeDash = true;
+  if (e.code === "Space") e.preventDefault();
+
+  // E : changer d'arme
   if (e.key === "e" || e.key === "E") {
     indexMode = (indexMode + 1) % modes.length;
   }
-
   // T : activer ou désactiver la résonance
   if (e.key === "t" || e.key === "T") {
     resonanceActive = !resonanceActive;
   }
-
-  // Saut
-  if ((e.key === "ArrowUp" || e.key === " ") && joueur.auSol) {
-    joueur.vitesseY = FORCE_SAUT;
-    joueur.auSol = false;
-  }
 });
-document.addEventListener("keyup", (e) => touches[e.key] = false);
+document.addEventListener("keyup", (e) => touches[e.code] = false);
 
 // Souris : clic gauche = attaque, clic droit = attaque spéciale
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());
@@ -68,117 +94,159 @@ canvas.addEventListener("mousedown", (e) => {
   if (e.button === 2) attaquer(true);
 });
 
-function attaquer(speciale) {
-  const arme = modes[indexMode];
-  const cy = joueur.y + joueur.taille / 2;
-  const resonance = resonanceActive || speciale;
-
-  if (arme === "epee") {
-    // Une lame apparaît devant le personnage pendant un court instant
-    const largeur = 50;
-    const x = joueur.direction === 1 ? joueur.x + joueur.taille : joueur.x - largeur;
-    attaques.push({
-      type: "lame",
-      x: x,
-      y: joueur.y,
-      largeur: largeur,
-      hauteur: joueur.taille,
-      duree: 15,
-      resonance: resonance
-    });
-  } else {
-    // Une flèche part dans la direction du personnage
-    attaques.push({
-      type: "fleche",
-      x: joueur.x + joueur.taille / 2,
-      y: cy,
-      vx: joueur.direction * 10,
-      duree: 120,
-      resonance: resonance
-    });
-  }
+// ----- Collisions -----
+function chevauche(a, b) {
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 }
 
-function toucheUnePlateforme(x, y) {
-  for (const p of plateformes) {
-    if (x > p.x && x < p.x + p.largeur && y > p.y && y < p.y + p.hauteur) {
+function estAuSol() {
+  const bas = joueur.y + joueur.h;
+  for (const s of SOLS) {
+    if (joueur.x < s.x + s.w && joueur.x + joueur.w > s.x && Math.abs(bas - s.y) < 0.5) {
       return true;
     }
   }
   return false;
 }
 
-function mettreAJour() {
-  // Déplacement horizontal et direction du regard
-  if (touches["ArrowLeft"]) {
-    joueur.x -= joueur.vitesse;
-    joueur.direction = -1;
-  }
-  if (touches["ArrowRight"]) {
-    joueur.x += joueur.vitesse;
-    joueur.direction = 1;
-  }
-
-  // Limites du monde
-  if (joueur.x < 0) joueur.x = 0;
-  if (joueur.x + joueur.taille > LARGEUR_MONDE) {
-    joueur.x = LARGEUR_MONDE - joueur.taille;
-  }
-
-  // Gravité
-  joueur.vitesseY += GRAVITE;
-  joueur.y += joueur.vitesseY;
-
-  // Collision avec les plateformes
-  joueur.auSol = false;
-  for (const p of plateformes) {
-    const toucheX = joueur.x + joueur.taille > p.x && joueur.x < p.x + p.largeur;
-    const toucheY = joueur.y + joueur.taille > p.y && joueur.y < p.y + p.hauteur;
-    if (toucheX && toucheY && joueur.vitesseY >= 0) {
-      joueur.y = p.y - joueur.taille;
-      joueur.vitesseY = 0;
-      joueur.auSol = true;
+function deplacer(dt) {
+  // Axe horizontal
+  joueur.x += joueur.vx * dt;
+  for (const s of SOLS) {
+    if (chevauche(joueur, s)) {
+      if (joueur.vx > 0) joueur.x = s.x - joueur.w;
+      else if (joueur.vx < 0) joueur.x = s.x + s.w;
+      joueur.vx = 0;
     }
   }
 
-  // Mise à jour des attaques
+  // Axe vertical
+  joueur.y += joueur.vy * dt;
+  for (const s of SOLS) {
+    if (chevauche(joueur, s)) {
+      if (joueur.vy > 0) joueur.y = s.y - joueur.h;
+      else if (joueur.vy < 0) joueur.y = s.y + s.h;
+      joueur.vy = 0;
+    }
+  }
+
+  joueur.auSol = estAuSol();
+}
+
+function reinitialiser() {
+  Object.assign(joueur, {
+    x: DEPART_X, y: DEPART_Y, vx: 0, vy: 0,
+    auSol: false, sautsRestants: SAUTS_MAX,
+    enDash: false, dashTimer: 0
+  });
+  attaques.length = 0;
+}
+
+// ----- Attaques -----
+function attaquer(speciale) {
+  const arme = modes[indexMode];
+  const resonance = resonanceActive || speciale;
+  const cx = joueur.x + joueur.w / 2;
+  const cy = joueur.y + joueur.h / 2;
+
+  if (arme === "epee") {
+    const largeur = 50;
+    const x = joueur.direction === 1 ? joueur.x + joueur.w : joueur.x - largeur;
+    attaques.push({ type: "lame", x: x, y: cy - 20, largeur: largeur, hauteur: 40, duree: 0.2, resonance: resonance });
+  } else {
+    attaques.push({ type: "fleche", x: cx, y: cy - 10, vx: joueur.direction * 600, duree: 2, resonance: resonance });
+  }
+}
+
+function toucheUnSol(x, y) {
+  for (const s of SOLS) {
+    if (x > s.x && x < s.x + s.w && y > s.y && y < s.y + s.h) return true;
+  }
+  return false;
+}
+
+function mettreAJourAttaques(dt) {
   for (let i = attaques.length - 1; i >= 0; i--) {
     const a = attaques[i];
-    a.duree--;
-
+    a.duree -= dt;
     if (a.type === "fleche") {
-      a.x += a.vx;
-      // La flèche disparaît si elle touche une plateforme ou sort du monde
-      if (toucheUnePlateforme(a.x, a.y) || a.x < 0 || a.x > LARGEUR_MONDE) {
+      a.x += a.vx * dt;
+      if (toucheUnSol(a.x, a.y)) {
         attaques.splice(i, 1);
         continue;
       }
     }
-
-    if (a.duree <= 0) {
-      attaques.splice(i, 1);
-    }
-  }
-
-  // La caméra suit le personnage, en restant dans le monde
-  camera.x = joueur.x + joueur.taille / 2 - canvas.width / 2;
-  if (camera.x < 0) camera.x = 0;
-  if (camera.x > LARGEUR_MONDE - canvas.width) {
-    camera.x = LARGEUR_MONDE - canvas.width;
+    if (a.duree <= 0) attaques.splice(i, 1);
   }
 }
 
+// ----- Mise à jour -----
+function mettreAJour(dt) {
+  // Dash
+  if (demandeDash && !joueur.enDash) {
+    joueur.enDash = true;
+    joueur.dashTimer = DUREE_DASH;
+    joueur.vx = joueur.direction * VITESSE_DASH;
+    joueur.vy = 0;
+  }
+  demandeDash = false;
+
+  if (joueur.enDash) {
+    // Pendant le dash : pas de gravité
+    joueur.dashTimer -= dt;
+    deplacer(dt);
+    if (joueur.dashTimer <= 0) {
+      joueur.enDash = false;
+      joueur.vx = 0;
+    }
+  } else {
+    // Déplacement horizontal
+    let dir = 0;
+    if (touches["ArrowLeft"] || touches["KeyA"]) dir -= 1;
+    if (touches["ArrowRight"] || touches["KeyD"]) dir += 1;
+    joueur.vx = dir * VITESSE;
+    if (dir !== 0) joueur.direction = dir;
+
+    // Gravité, et réinitialisation des sauts au sol
+    if (!joueur.auSol) {
+      joueur.vy += GRAVITE * dt;
+    } else {
+      joueur.sautsRestants = SAUTS_MAX;
+    }
+
+    // Saut (sol puis double saut)
+    if (demandeSaut && joueur.sautsRestants > 0) {
+      joueur.vy = FORCE_SAUT;
+      joueur.sautsRestants--;
+      joueur.auSol = false;
+    }
+
+    deplacer(dt);
+  }
+  demandeSaut = false;
+
+  // Zone de mort : on recommence au départ
+  if (joueur.y + joueur.h > ZONE_MORT_Y) reinitialiser();
+
+  mettreAJourAttaques(dt);
+
+  // Caméra qui suit le personnage
+  camera.x = joueur.x + joueur.w / 2 - canvas.width / 2;
+  camera.y = joueur.y + joueur.h / 2 - canvas.height / 2;
+}
+
+// ----- Dessin -----
 function dessiner() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = "#0d1020";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // Monde (décalé par la caméra)
   ctx.save();
-  ctx.translate(-camera.x, 0);
+  ctx.translate(-Math.round(camera.x), -Math.round(camera.y));
 
-  // Plateformes
-  ctx.fillStyle = "#3a4466";
-  for (const p of plateformes) {
-    ctx.fillRect(p.x, p.y, p.largeur, p.hauteur);
+  // Tuiles du niveau
+  ctx.fillStyle = "#3a3142";
+  for (const s of SOLS) {
+    ctx.fillRect(s.x, s.y, s.w, s.h);
   }
 
   // Attaques
@@ -194,21 +262,22 @@ function dessiner() {
 
   // Personnage
   ctx.fillStyle = "#4da6ff";
-  ctx.fillRect(joueur.x, joueur.y, joueur.taille, joueur.taille);
+  ctx.fillRect(joueur.x, joueur.y, joueur.w, joueur.h);
 
-  // Arme tenue dans la main
+  // Arme dans la main
   const arme = modes[indexMode];
+  const droite = joueur.direction === 1;
   if (arme === "epee") {
-    const x = joueur.direction === 1 ? joueur.x + joueur.taille - 4 : joueur.x - 26;
+    const x = droite ? joueur.x + joueur.w - 4 : joueur.x - 26;
     ctx.fillStyle = resonanceActive ? "#9be7ff" : "#cfd8e3";
-    ctx.fillRect(x, joueur.y + 15, 30, 5);
+    ctx.fillRect(x, joueur.y + 40, 30, 5);
   } else {
-    const cx = joueur.direction === 1 ? joueur.x + joueur.taille + 6 : joueur.x - 6;
-    const cy = joueur.y + joueur.taille / 2;
+    const cx = droite ? joueur.x + joueur.w + 6 : joueur.x - 6;
+    const cy = joueur.y + 45;
     ctx.strokeStyle = resonanceActive ? "#9be7ff" : "#c9a66b";
     ctx.lineWidth = 3;
     ctx.beginPath();
-    if (joueur.direction === 1) {
+    if (droite) {
       ctx.arc(cx, cy, 14, -Math.PI / 2, Math.PI / 2);
     } else {
       ctx.arc(cx, cy, 14, Math.PI / 2, Math.PI * 1.5);
@@ -218,7 +287,7 @@ function dessiner() {
 
   ctx.restore();
 
-  // Affichage de l'arme et de la résonance (fixe à l'écran)
+  // Affichage fixe à l'écran
   ctx.fillStyle = "#ffffff";
   ctx.font = "16px Arial";
   ctx.fillText("Arme : " + (arme === "epee" ? "Épée" : "Arc"), 10, 25);
@@ -226,10 +295,13 @@ function dessiner() {
   ctx.fillText("Clic gauche : attaque   Clic droit : attaque spéciale", 10, canvas.height - 12);
 }
 
-function boucle() {
-  mettreAJour();
+// ----- Boucle de jeu -----
+let dernier = performance.now();
+function boucle(t) {
+  const dt = Math.min((t - dernier) / 1000, 1 / 30);
+  dernier = t;
+  mettreAJour(dt);
   dessiner();
   requestAnimationFrame(boucle);
 }
-
-boucle();
+requestAnimationFrame(boucle);
