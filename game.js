@@ -5,10 +5,10 @@ const ctx = canvas.getContext("2d");
 const imageIdle = new Image();
 imageIdle.src = "idle.png";
 const IDLE_FRAMES = 6;
-const IDLE_CELLE_W = 184;
-const IDLE_CELLE_H = 345;
+const IDLE_CELLE_W = 288;
+const IDLE_CELLE_H = 427;
 const IDLE_VITESSE = 8;
-const IDLE_ECHELLE = 0.29;      // personnage affiché à ~98 px de haut
+const IDLE_ECHELLE = 0.23;      // personnage affiché à ~98 px de haut
 
 // ----- Animation marche (feuille de 8 poses) -----
 const imageMarche = new Image();
@@ -16,8 +16,10 @@ imageMarche.src = "marche.png";
 const MARCHE_FRAMES = 8;
 const MARCHE_CELLE_W = 160;
 const MARCHE_CELLE_H = 247;
-const MARCHE_VITESSE = 10;      // poses par seconde
-const MARCHE_ECHELLE = 0.40;    // même taille à l'écran que l'idle
+const MARCHE_VITESSE = 10;           // poses par seconde en marchant
+const MARCHE_ECHELLE = 0.40;         // même taille à l'écran que l'idle
+const VITESSE_COURSE = 340;          // vitesse en courant (la marche reste à 200)
+const MARCHE_VITESSE_COURSE = 16;    // poses par seconde en courant
 
 // ----- Réglages repris du projet Godot « fracture » -----
 const TAILLE_TUILE = 16;
@@ -451,6 +453,7 @@ function mettreAJourAttaques(dt) {
 // ----- Mise à jour générale -----
 function mettreAJour(dt) {
   const etaitAuSol = joueur.auSol;
+  const court = touches["ControlLeft"] || touches["ControlRight"];
 
   // Dash
   if (demandeDash && !joueur.enDash && joueur.reculTimer <= 0) {
@@ -477,7 +480,7 @@ function mettreAJour(dt) {
     let dir = 0;
     if (touches["ArrowLeft"] || touches["KeyA"]) dir -= 1;
     if (touches["ArrowRight"] || touches["KeyD"]) dir += 1;
-    joueur.vx = dir * VITESSE;
+    joueur.vx = dir * (court ? VITESSE_COURSE : VITESSE);
     if (dir !== 0) joueur.direction = dir;
 
     if (!joueur.auSol) {
@@ -512,7 +515,7 @@ function mettreAJour(dt) {
 
   // Avance du cycle de marche (seulement au sol et en mouvement)
   if (joueur.auSol && Math.abs(joueur.vx) > 0 && !joueur.enDash) {
-    anim.marche += dt * MARCHE_VITESSE;
+    anim.marche += dt * (court ? MARCHE_VITESSE_COURSE : MARCHE_VITESSE);
   } else {
     anim.marche = 0;
   }
@@ -563,7 +566,7 @@ function dessinerJoueur() {
   ctx.scale(joueur.direction, 1);
 
   if (enMarche && imageMarche.complete && imageMarche.naturalWidth > 0) {
-    // Marche : une des 8 poses, en boucle
+    // Marche ou course : une des 8 poses, en boucle
     const frame = Math.floor(anim.marche) % MARCHE_FRAMES;
     const largeur = MARCHE_CELLE_W * MARCHE_ECHELLE;
     const hauteur = MARCHE_CELLE_H * MARCHE_ECHELLE;
