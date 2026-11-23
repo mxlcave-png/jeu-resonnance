@@ -8,7 +8,16 @@ const IDLE_FRAMES = 6;
 const IDLE_CELLE_W = 184;
 const IDLE_CELLE_H = 345;
 const IDLE_VITESSE = 8;
-const IDLE_HAUTEUR_AFFICHEE = 100;
+const IDLE_ECHELLE = 0.29;      // personnage affiché à ~98 px de haut
+
+// ----- Animation marche (feuille de 8 poses) -----
+const imageMarche = new Image();
+imageMarche.src = "marche.png";
+const MARCHE_FRAMES = 8;
+const MARCHE_CELLE_W = 160;
+const MARCHE_CELLE_H = 247;
+const MARCHE_VITESSE = 10;      // poses par seconde
+const MARCHE_ECHELLE = 0.40;    // même taille à l'écran que l'idle
 
 // ----- Réglages repris du projet Godot « fracture » -----
 const TAILLE_TUILE = 16;
@@ -90,6 +99,7 @@ const joueur = {
 const anim = {
   echelleX: 1,
   echelleY: 1,
+  marche: 0,
   trainee: []
 };
 const particules = [];
@@ -241,6 +251,7 @@ function reinitialiser() {
   anim.trainee.length = 0;
   anim.echelleX = 1;
   anim.echelleY = 1;
+  anim.marche = 0;
   secousse = 0;
   ennemis = creerEnnemis();
   for (const s of SOLS) {
@@ -499,6 +510,13 @@ function mettreAJour(dt) {
   anim.echelleX += (1 - anim.echelleX) * k;
   anim.echelleY += (1 - anim.echelleY) * k;
 
+  // Avance du cycle de marche (seulement au sol et en mouvement)
+  if (joueur.auSol && Math.abs(joueur.vx) > 0 && !joueur.enDash) {
+    anim.marche += dt * MARCHE_VITESSE;
+  } else {
+    anim.marche = 0;
+  }
+
   // Traînée du dash
   for (let i = anim.trainee.length - 1; i >= 0; i--) {
     anim.trainee[i].vie -= dt;
@@ -536,6 +554,7 @@ function mettreAJour(dt) {
 function dessinerJoueur() {
   const cx = joueur.x + joueur.w / 2;
   const pieds = joueur.y + joueur.h;
+  const enMarche = joueur.auSol && Math.abs(joueur.vx) > 0 && !joueur.enDash;
 
   ctx.save();
   ctx.globalAlpha = (joueur.invulnerable > 0 && Math.floor(joueur.invulnerable * 10) % 2 === 0) ? 0.3 : 1;
@@ -543,18 +562,28 @@ function dessinerJoueur() {
   ctx.scale(anim.echelleX, anim.echelleY);
   ctx.scale(joueur.direction, 1);
 
-  if (imageIdle.complete && imageIdle.naturalWidth > 0) {
+  if (enMarche && imageMarche.complete && imageMarche.naturalWidth > 0) {
+    // Marche : une des 8 poses, en boucle
+    const frame = Math.floor(anim.marche) % MARCHE_FRAMES;
+    const largeur = MARCHE_CELLE_W * MARCHE_ECHELLE;
+    const hauteur = MARCHE_CELLE_H * MARCHE_ECHELLE;
+    ctx.drawImage(
+      imageMarche,
+      frame * MARCHE_CELLE_W, 0, MARCHE_CELLE_W, MARCHE_CELLE_H,
+      -largeur / 2, -hauteur, largeur, hauteur
+    );
+  } else if (imageIdle.complete && imageIdle.naturalWidth > 0) {
+    // Repos ou en l'air : une des 6 poses idle, en boucle
     const frame = Math.floor(performance.now() / 1000 * IDLE_VITESSE) % IDLE_FRAMES;
-    const ratio = IDLE_HAUTEUR_AFFICHEE / IDLE_CELLE_H;
-    const largeur = IDLE_CELLE_W * ratio;
-    const hauteur = IDLE_CELLE_H * ratio;
+    const largeur = IDLE_CELLE_W * IDLE_ECHELLE;
+    const hauteur = IDLE_CELLE_H * IDLE_ECHELLE;
     ctx.drawImage(
       imageIdle,
       frame * IDLE_CELLE_W, 0, IDLE_CELLE_W, IDLE_CELLE_H,
       -largeur / 2, -hauteur, largeur, hauteur
     );
   } else {
-    // Secours tant que idle.png n'est pas chargé
+    // Secours tant que les images ne sont pas chargées
     ctx.fillStyle = "#2a2f3d";
     ctx.fillRect(-joueur.w / 2, -joueur.h, joueur.w, joueur.h);
   }
