@@ -32,6 +32,15 @@ const SAUT_ECHELLE = 0.365;          // même taille à l'écran que l'idle
 const DUREE_DECOLLAGE = 0.08;        // pose 2 juste après le saut
 const DUREE_RECUPERATION = 0.12;     // pose 8 juste après l'atterrissage
 
+// ----- Animation double saut (feuille de 8 poses, flammes sur la pose 5) -----
+const imageDoubleSaut = new Image();
+imageDoubleSaut.src = "double_saut.png";
+const DOUBLE_CELLE_W = 2172 / 8;     // 271.5 px par pose
+const DOUBLE_CELLE_H = 724;
+const DOUBLE_PIEDS = 598;            // ligne des pieds dans cette feuille
+const DOUBLE_ECHELLE = 0.387;        // un peu plus grand, car le personnage est un peu plus petit dans cette feuille
+const DUREE_BOOST = 0.15;            // durée de la pose avec flammes
+
 // ----- Réglages repris du projet Godot « fracture » -----
 const TAILLE_TUILE = 16;
 const GRAVITE = 980;
@@ -105,7 +114,8 @@ const joueur = {
   invulnerable: 0,
   pv: PV_MAX,
   direction: 1,
-  attaqueTimer: 0
+  attaqueTimer: 0,
+  doubleSautActif: false
 };
 
 // ----- Animation -----
@@ -115,6 +125,7 @@ const anim = {
   marche: 0,
   decollage: 0,
   recuperation: 0,
+  boost: 0,
   trainee: []
 };
 const particules = [];
@@ -269,6 +280,8 @@ function reinitialiser() {
   anim.marche = 0;
   anim.decollage = 0;
   anim.recuperation = 0;
+  anim.boost = 0;
+  joueur.doubleSautActif = false;
   secousse = 0;
   ennemis = creerEnnemis();
   for (const s of SOLS) {
@@ -509,6 +522,10 @@ function mettreAJour(dt) {
       joueur.sautsRestants--;
       joueur.auSol = false;
       anim.decollage = DUREE_DECOLLAGE;
+      if (joueur.sautsRestants === 0) {   // c'est le double saut
+        joueur.doubleSautActif = true;
+        anim.boost = DUREE_BOOST;
+      }
     }
 
     deplacer(dt);
@@ -531,6 +548,10 @@ function mettreAJour(dt) {
   // Durées des poses de décollage et de réception
   if (anim.decollage > 0) anim.decollage -= dt;
   if (anim.recuperation > 0) anim.recuperation -= dt;
+  if (anim.boost > 0) anim.boost -= dt;
+
+  // Le double saut est terminé une fois posé et la récupération finie
+  if (joueur.auSol && anim.recuperation <= 0) joueur.doubleSautActif = false;
 
   // Avance du cycle de marche (seulement au sol et en mouvement)
   if (joueur.auSol && Math.abs(joueur.vx) > 0 && !joueur.enDash) {
@@ -583,6 +604,13 @@ function poseSaut() {
   return 6;                              // chute
 }
 
+function poseDoubleSaut() {
+  if (anim.boost > 0) return 4;          // flammes du double saut
+  if (joueur.vy < -150) return 3;        // montée
+  if (joueur.vy <= 60) return 5;         // sommet
+  return 6;                              // chute
+}
+
 // ----- Dessin -----
 function dessinerPose(image, frame, cellW, cellH, pieds, echelle) {
   const largeur = cellW * echelle;
@@ -605,7 +633,11 @@ function dessinerJoueur() {
   ctx.scale(anim.echelleX, anim.echelleY);
   ctx.scale(joueur.direction, 1);
 
-  if (!joueur.auSol && imageSaut.complete && imageSaut.naturalWidth > 0) {
+  if (joueur.doubleSautActif && (!joueur.auSol || anim.recuperation > 0) && imageDoubleSaut.complete && imageDoubleSaut.naturalWidth > 0) {
+    // Double saut, puis atterrissage avec la même feuille
+    const pose = joueur.auSol ? 7 : poseDoubleSaut();
+    dessinerPose(imageDoubleSaut, pose, DOUBLE_CELLE_W, DOUBLE_CELLE_H, DOUBLE_PIEDS, DOUBLE_ECHELLE);
+  } else if (!joueur.auSol && imageSaut.complete && imageSaut.naturalWidth > 0) {
     // En l'air : poses de saut selon la phase
     dessinerPose(imageSaut, poseSaut(), SAUT_CELLE_W, SAUT_CELLE_H, SAUT_PIEDS, SAUT_ECHELLE);
   } else if (joueur.auSol && anim.recuperation > 0 && imageSaut.complete && imageSaut.naturalWidth > 0) {
