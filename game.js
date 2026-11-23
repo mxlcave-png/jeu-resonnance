@@ -21,6 +21,17 @@ const MARCHE_ECHELLE = 0.40;         // même taille à l'écran que l'idle
 const VITESSE_COURSE = 340;          // vitesse en courant (la marche reste à 200)
 const MARCHE_VITESSE_COURSE = 16;    // poses par seconde en courant
 
+// ----- Animation saut (feuille de 8 poses) -----
+const imageSaut = new Image();
+imageSaut.src = "saut.png";
+const SAUT_FRAMES = 8;
+const SAUT_CELLE_W = 2172 / 8;       // 271.5 px par pose (feuille de 2172 px)
+const SAUT_CELLE_H = 724;            // hauteur réelle de la feuille
+const SAUT_PIEDS = 573;              // ligne des pieds dans la feuille (commune à toutes les poses)
+const SAUT_ECHELLE = 0.365;          // même taille à l'écran que l'idle
+const DUREE_DECOLLAGE = 0.08;        // pose 2 juste après le saut
+const DUREE_RECUPERATION = 0.12;     // pose 8 juste après l'atterrissage
+
 // ----- Réglages repris du projet Godot « fracture » -----
 const TAILLE_TUILE = 16;
 const GRAVITE = 980;
@@ -102,6 +113,8 @@ const anim = {
   echelleX: 1,
   echelleY: 1,
   marche: 0,
+  decollage: 0,
+  recuperation: 0,
   trainee: []
 };
 const particules = [];
@@ -254,6 +267,8 @@ function reinitialiser() {
   anim.echelleX = 1;
   anim.echelleY = 1;
   anim.marche = 0;
+  anim.decollage = 0;
+  anim.recuperation = 0;
   secousse = 0;
   ennemis = creerEnnemis();
   for (const s of SOLS) {
@@ -493,18 +508,18 @@ function mettreAJour(dt) {
       joueur.vy = FORCE_SAUT;
       joueur.sautsRestants--;
       joueur.auSol = false;
-      anim.echelleX = 0.8;
-      anim.echelleY = 1.2;
+      anim.decollage = DUREE_DECOLLAGE;
     }
 
     deplacer(dt);
   }
   demandeSaut = false;
 
-  // Atterrissage : écrasement et poussière
+  // Atterrissage : légère compression, poussière et pose de réception
   if (!etaitAuSol && joueur.auSol) {
-    anim.echelleX = 1.25;
-    anim.echelleY = 0.75;
+    anim.echelleX = 1.1;
+    anim.echelleY = 0.9;
+    anim.recuperation = DUREE_RECUPERATION;
     creerParticules(joueur.x + joueur.w / 2, joueur.y + joueur.h, "#5a5266", 6, 90);
   }
 
@@ -512,6 +527,10 @@ function mettreAJour(dt) {
   const k = Math.min(1, 10 * dt);
   anim.echelleX += (1 - anim.echelleX) * k;
   anim.echelleY += (1 - anim.echelleY) * k;
+
+  // Durées des poses de décollage et de réception
+  if (anim.decollage > 0) anim.decollage -= dt;
+  if (anim.recuperation > 0) anim.recuperation -= dt;
 
   // Avance du cycle de marche (seulement au sol et en mouvement)
   if (joueur.auSol && Math.abs(joueur.vx) > 0 && !joueur.enDash) {
@@ -553,7 +572,28 @@ function mettreAJour(dt) {
   camera.y = joueur.y + joueur.h / 2 - canvas.height / 2;
 }
 
+// ----- Choix de la pose de saut selon la phase du saut -----
+function poseSaut() {
+  if (anim.recuperation > 0) return 7;   // atterrissage
+  if (anim.decollage > 0) return 1;      // décollage
+  if (joueur.vy < -200) return 2;        // montée rapide
+  if (joueur.vy < -60) return 3;         // montée
+  if (joueur.vy <= 60) return 4;         // sommet
+  if (joueur.vy <= 250) return 5;        // descente
+  return 6;                              // chute
+}
+
 // ----- Dessin -----
+function dessinerPose(image, frame, cellW, cellH, pieds, echelle) {
+  const largeur = cellW * echelle;
+  const hauteur = cellH * echelle;
+  ctx.drawImage(
+    image,
+    frame * cellW, 0, cellW, cellH,
+    -largeur / 2, -pieds * echelle, largeur, hauteur
+  );
+}
+
 function dessinerJoueur() {
   const cx = joueur.x + joueur.w / 2;
   const pieds = joueur.y + joueur.h;
@@ -565,26 +605,20 @@ function dessinerJoueur() {
   ctx.scale(anim.echelleX, anim.echelleY);
   ctx.scale(joueur.direction, 1);
 
-  if (enMarche && imageMarche.complete && imageMarche.naturalWidth > 0) {
+  if (!joueur.auSol && imageSaut.complete && imageSaut.naturalWidth > 0) {
+    // En l'air : poses de saut selon la phase
+    dessinerPose(imageSaut, poseSaut(), SAUT_CELLE_W, SAUT_CELLE_H, SAUT_PIEDS, SAUT_ECHELLE);
+  } else if (joueur.auSol && anim.recuperation > 0 && imageSaut.complete && imageSaut.naturalWidth > 0) {
+    // Atterrissage : pose de réception
+    dessinerPose(imageSaut, 7, SAUT_CELLE_W, SAUT_CELLE_H, SAUT_PIEDS, SAUT_ECHELLE);
+  } else if (enMarche && imageMarche.complete && imageMarche.naturalWidth > 0) {
     // Marche ou course : une des 8 poses, en boucle
     const frame = Math.floor(anim.marche) % MARCHE_FRAMES;
-    const largeur = MARCHE_CELLE_W * MARCHE_ECHELLE;
-    const hauteur = MARCHE_CELLE_H * MARCHE_ECHELLE;
-    ctx.drawImage(
-      imageMarche,
-      frame * MARCHE_CELLE_W, 0, MARCHE_CELLE_W, MARCHE_CELLE_H,
-      -largeur / 2, -hauteur, largeur, hauteur
-    );
+    dessinerPose(imageMarche, frame, MARCHE_CELLE_W, MARCHE_CELLE_H, MARCHE_CELLE_H, MARCHE_ECHELLE);
   } else if (imageIdle.complete && imageIdle.naturalWidth > 0) {
-    // Repos ou en l'air : une des 6 poses idle, en boucle
+    // Repos : une des 6 poses idle, en boucle
     const frame = Math.floor(performance.now() / 1000 * IDLE_VITESSE) % IDLE_FRAMES;
-    const largeur = IDLE_CELLE_W * IDLE_ECHELLE;
-    const hauteur = IDLE_CELLE_H * IDLE_ECHELLE;
-    ctx.drawImage(
-      imageIdle,
-      frame * IDLE_CELLE_W, 0, IDLE_CELLE_W, IDLE_CELLE_H,
-      -largeur / 2, -hauteur, largeur, hauteur
-    );
+    dessinerPose(imageIdle, frame, IDLE_CELLE_W, IDLE_CELLE_H, IDLE_CELLE_H, IDLE_ECHELLE);
   } else {
     // Secours tant que les images ne sont pas chargées
     ctx.fillStyle = "#2a2f3d";
@@ -707,7 +741,8 @@ function dessiner() {
 
   dessinerJoueur();
 
-  if (daguesVisibles()) dessinerDagues();
+  // Les dagues ne s'affichent qu'au sol, pour ne pas se décoller du corps en l'air
+  if (joueur.auSol && daguesVisibles()) dessinerDagues();
 
   dessinerParticules();
 
