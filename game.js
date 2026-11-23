@@ -41,6 +41,93 @@ const DOUBLE_PIEDS = 598;            // ligne des pieds dans cette feuille
 const DOUBLE_ECHELLE = 0.387;        // un peu plus grand, car le personnage est un peu plus petit dans cette feuille
 const DUREE_BOOST = 0.15;            // durée de la pose avec flammes
 
+// ----- Terrain : atlas terrain.png (65 pièces, dans l'ordre des biomes) -----
+const imageTerrain = new Image();
+imageTerrain.src = "terrain.png";
+const TERRAIN = [
+  { x: 6, y: 6, w: 235, h: 105 }, // 0
+  { x: 247, y: 6, w: 153, h: 108 }, // 1
+  { x: 406, y: 6, w: 76, h: 90 }, // 2
+  { x: 488, y: 6, w: 277, h: 104 }, // 3
+  { x: 771, y: 6, w: 182, h: 110 }, // 4
+  { x: 959, y: 6, w: 365, h: 103 }, // 5
+  { x: 1330, y: 6, w: 235, h: 119 }, // 6
+  { x: 6, y: 131, w: 62, h: 76 }, // 7
+  { x: 74, y: 131, w: 74, h: 77 }, // 8
+  { x: 154, y: 131, w: 50, h: 50 }, // 9
+  { x: 210, y: 131, w: 274, h: 134 }, // 10
+  { x: 490, y: 131, w: 68, h: 89 }, // 11
+  { x: 564, y: 131, w: 80, h: 98 }, // 12
+  { x: 650, y: 131, w: 266, h: 107 }, // 13
+  { x: 922, y: 131, w: 114, h: 119 }, // 14
+  { x: 1042, y: 131, w: 58, h: 162 }, // 15
+  { x: 1106, y: 131, w: 51, h: 167 }, // 16
+  { x: 1163, y: 131, w: 59, h: 167 }, // 17
+  { x: 1228, y: 131, w: 79, h: 93 }, // 18
+  { x: 1313, y: 131, w: 88, h: 153 }, // 19
+  { x: 1407, y: 131, w: 65, h: 156 }, // 20
+  { x: 1478, y: 131, w: 71, h: 157 }, // 21
+  { x: 6, y: 304, w: 70, h: 157 }, // 22
+  { x: 82, y: 304, w: 183, h: 111 }, // 23
+  { x: 271, y: 304, w: 69, h: 99 }, // 24
+  { x: 346, y: 304, w: 189, h: 115 }, // 25
+  { x: 541, y: 304, w: 176, h: 98 }, // 26
+  { x: 723, y: 304, w: 107, h: 106 }, // 27
+  { x: 836, y: 304, w: 198, h: 129 }, // 28
+  { x: 1040, y: 304, w: 61, h: 129 }, // 29
+  { x: 1107, y: 304, w: 63, h: 75 }, // 30
+  { x: 1176, y: 304, w: 140, h: 131 }, // 31
+  { x: 1322, y: 304, w: 39, h: 39 }, // 32
+  { x: 1367, y: 304, w: 193, h: 118 }, // 33
+  { x: 6, y: 467, w: 87, h: 116 }, // 34
+  { x: 99, y: 467, w: 128, h: 115 }, // 35
+  { x: 233, y: 467, w: 143, h: 107 }, // 36
+  { x: 382, y: 467, w: 88, h: 73 }, // 37
+  { x: 476, y: 467, w: 110, h: 127 }, // 38
+  { x: 592, y: 467, w: 77, h: 110 }, // 39
+  { x: 675, y: 467, w: 55, h: 110 }, // 40
+  { x: 736, y: 467, w: 50, h: 107 }, // 41
+  { x: 792, y: 467, w: 103, h: 108 }, // 42
+  { x: 901, y: 467, w: 122, h: 106 }, // 43
+  { x: 1029, y: 467, w: 88, h: 103 }, // 44
+  { x: 1123, y: 467, w: 72, h: 101 }, // 45
+  { x: 1201, y: 467, w: 104, h: 104 }, // 46
+  { x: 1311, y: 467, w: 144, h: 105 }, // 47
+  { x: 1461, y: 467, w: 121, h: 105 }, // 48
+  { x: 6, y: 600, w: 56, h: 84 }, // 49
+  { x: 68, y: 600, w: 24, h: 29 }, // 50
+  { x: 98, y: 600, w: 121, h: 89 }, // 51
+  { x: 225, y: 600, w: 111, h: 185 }, // 52
+  { x: 342, y: 600, w: 81, h: 146 }, // 53
+  { x: 429, y: 600, w: 68, h: 149 }, // 54
+  { x: 503, y: 600, w: 65, h: 147 }, // 55
+  { x: 574, y: 600, w: 65, h: 146 }, // 56
+  { x: 645, y: 600, w: 101, h: 150 }, // 57
+  { x: 752, y: 600, w: 84, h: 150 }, // 58
+  { x: 842, y: 600, w: 123, h: 146 }, // 59
+  { x: 971, y: 600, w: 149, h: 144 }, // 60
+  { x: 1126, y: 600, w: 58, h: 141 }, // 61
+  { x: 1190, y: 600, w: 102, h: 144 }, // 62
+  { x: 1298, y: 600, w: 79, h: 144 }, // 63
+  { x: 1383, y: 600, w: 109, h: 143 }  // 64
+];
+
+// Décor de fond : les 65 pièces dans l'ordre, en lignes de 2000 px au-dessus du niveau
+const DECOR = [];
+{
+  let dx = 0;
+  let couche = 0;
+  for (let i = 0; i < TERRAIN.length; i++) {
+    const p = TERRAIN[i];
+    if (dx + p.w > 2000) {
+      dx = 0;
+      couche++;
+    }
+    DECOR.push({ piece: p, x: dx, y: -380 + couche * 170 });
+    dx += p.w + 8;
+  }
+}
+
 // ----- Réglages repris du projet Godot « fracture » -----
 const TAILLE_TUILE = 16;
 const GRAVITE = 980;
@@ -729,6 +816,20 @@ function dessinerProjectiles() {
   }
 }
 
+function dessinerDecor() {
+  if (!imageTerrain.complete || imageTerrain.naturalWidth === 0) return;
+  ctx.save();
+  ctx.globalAlpha = 0.35;
+  for (const d of DECOR) {
+    ctx.drawImage(
+      imageTerrain,
+      d.piece.x, d.piece.y, d.piece.w, d.piece.h,
+      d.x, d.y, d.piece.w, d.piece.h
+    );
+  }
+  ctx.restore();
+}
+
 function dessiner() {
   ctx.fillStyle = "#0d1020";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -738,6 +839,8 @@ function dessiner() {
 
   ctx.save();
   ctx.translate(-Math.round(camera.x) + decalX, -Math.round(camera.y) + decalY);
+
+  dessinerDecor();
 
   for (const s of SOLS) {
     if (s.reactive) {
