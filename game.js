@@ -112,22 +112,6 @@ const TERRAIN = [
   { x: 1383, y: 600, w: 109, h: 143 }  // 64
 ];
 
-// Décor de fond : les 65 pièces dans l'ordre, en lignes de 2000 px au-dessus du niveau
-const DECOR = [];
-{
-  let dx = 0;
-  let couche = 0;
-  for (let i = 0; i < TERRAIN.length; i++) {
-    const p = TERRAIN[i];
-    if (dx + p.w > 2000) {
-      dx = 0;
-      couche++;
-    }
-    DECOR.push({ piece: p, x: dx, y: -380 + couche * 170 });
-    dx += p.w + 8;
-  }
-}
-
 // ----- Réglages repris du projet Godot « fracture » -----
 const TAILLE_TUILE = 16;
 const GRAVITE = 980;
@@ -188,6 +172,21 @@ for (const [ligne, segments] of LIGNES) {
 }
 SOLS.push({ x: -88 * TAILLE_TUILE, y: 363 * TAILLE_TUILE, w: 4 * TAILLE_TUILE, h: 10 * TAILLE_TUILE });
 SOLS.push({ x: 1500, y: 250, w: 96, h: 16, reactive: true, yBas: 250, yHaut: 120 });
+
+// ----- Terrain jouable : les pièces forment un parcours, dans l'ordre des biomes -----
+const TERRAIN_DEPART_X = 1620;         // juste après la plateforme réactive
+const TERRAIN_DEPART_Y = 250;          // même hauteur que la plateforme réactive
+const TERRAIN_ECART = 40;              // espace entre deux pièces (franchissable en un saut)
+const TERRAIN_HAUTEURS = [0, -40, -80, -40, 0, 40];   // variation de hauteur, par pas de 40 px
+{
+  let x = TERRAIN_DEPART_X;
+  for (let i = 0; i < TERRAIN.length; i++) {
+    const p = TERRAIN[i];
+    const y = TERRAIN_DEPART_Y + TERRAIN_HAUTEURS[i % TERRAIN_HAUTEURS.length];
+    SOLS.push({ x: x, y: y, w: p.w, h: p.h, piece: p });
+    x += p.w + TERRAIN_ECART;
+  }
+}
 
 // ----- Le personnage -----
 const joueur = {
@@ -816,20 +815,6 @@ function dessinerProjectiles() {
   }
 }
 
-function dessinerDecor() {
-  if (!imageTerrain.complete || imageTerrain.naturalWidth === 0) return;
-  ctx.save();
-  ctx.globalAlpha = 0.35;
-  for (const d of DECOR) {
-    ctx.drawImage(
-      imageTerrain,
-      d.piece.x, d.piece.y, d.piece.w, d.piece.h,
-      d.x, d.y, d.piece.w, d.piece.h
-    );
-  }
-  ctx.restore();
-}
-
 function dessiner() {
   ctx.fillStyle = "#0d1020";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -840,9 +825,17 @@ function dessiner() {
   ctx.save();
   ctx.translate(-Math.round(camera.x) + decalX, -Math.round(camera.y) + decalY);
 
-  dessinerDecor();
-
   for (const s of SOLS) {
+    if (s.piece) {
+      if (imageTerrain.complete && imageTerrain.naturalWidth > 0) {
+        ctx.drawImage(
+          imageTerrain,
+          s.piece.x, s.piece.y, s.piece.w, s.piece.h,
+          s.x, s.y, s.w, s.h
+        );
+      }
+      continue;
+    }
     if (s.reactive) {
       ctx.fillStyle = "#1f5f6e";
       ctx.fillRect(s.x, s.y, s.w, s.h);
